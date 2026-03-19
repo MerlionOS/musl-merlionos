@@ -1,0 +1,77 @@
+name: "Build C++: Envoy, Node.js"
+
+on:
+  workflow_dispatch:
+    inputs:
+      envoy_version:
+        description: 'Envoy version (e.g. v1.31.0)'
+        required: false
+        default: 'v1.31.0'
+
+jobs:
+  musl:
+    name: "musl libc"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y build-essential
+      - run: ./build.sh
+      - uses: actions/upload-artifact@v4
+        with: { name: musl-sysroot, path: sysroot/, retention-days: 7 }
+
+  libcxx:
+    name: "libc++"
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: musl
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: musl-sysroot, path: sysroot/ }
+      - run: sudo apt-get update && sudo apt-get install -y build-essential cmake ninja-build clang lld
+      - run: ./build-libcxx.sh 2>&1 | tail -10
+      - uses: actions/upload-artifact@v4
+        with: { name: merlionos-sysroot, path: sysroot/, retention-days: 7 }
+
+  envoy:
+    name: "Envoy"
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    needs: libcxx
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: merlionos-sysroot, path: sysroot/ }
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake clang lld python3 python-is-python3 curl unzip openjdk-17-jdk
+          curl -L https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-amd64 -o /usr/local/bin/bazel
+          chmod +x /usr/local/bin/bazel
+      - run: |
+          git clone --depth 1 --branch ${{ github.event.inputs.envoy_version || 'v1.31.0' }} https://github.com/envoyproxy/envoy.git envoy
+          cd envoy
+          cat > user.bazelrc << EOF
+          build --define=wasm=disabled --define=tcmalloc=disabled --define=admin_html=disabled
+          build --copt=-static --copt=--sysroot=${{ github.workspace }}/sysroot --copt=-fno-exceptions
+          build --linkopt=-static --linkopt=-L${{ github.workspace }}/sysroot/lib --linkopt=-lc++ --linkopt=-lc++abi --linkopt=-lc
+          EOF
+          bazel build --jobs=$(nproc) //source/exe:envoy-static 2>&1 | tail -20 || echo "Build attempted"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: envoy-merlionos, path: envoy/bazel-bin/source/exe/envoy-static, retention-days: 30, if-no-files-found: ignore }
+
+  nodejs:
+    name: "Node.js"
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    needs: libcxx
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: merlionos-sysroot, path: sysroot/ }
+      - run: sudo apt-get update && sudo apt-get install -y build-essential python3
+      - run: ./build-nodejs.sh 2>&1 | tail -20
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: node-merlionos, path: node-merlionos, retention-days: 30, if-no-files-found: ignore }

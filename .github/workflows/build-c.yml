@@ -1,0 +1,78 @@
+name: "Build C: nginx, Lua, Python, examples"
+
+on:
+  workflow_dispatch:
+  push:
+    paths: ['build.sh', 'build-nginx.sh', 'build-lua.sh', 'build-python.sh', 'src/**', 'arch/**']
+
+jobs:
+  musl:
+    name: "musl libc"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y build-essential
+      - run: ./build.sh
+      - uses: actions/upload-artifact@v4
+        with: { name: musl-sysroot, path: sysroot/, retention-days: 7 }
+
+  nginx:
+    name: "nginx"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: musl
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: musl-sysroot, path: sysroot/ }
+      - run: sudo apt-get update && sudo apt-get install -y build-essential musl-tools
+      - run: CC=musl-gcc ./build-nginx.sh 2>&1 | tail -10
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: nginx-merlionos, path: nginx-merlionos, retention-days: 30, if-no-files-found: ignore }
+
+  lua:
+    name: "Lua"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: musl
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: musl-sysroot, path: sysroot/ }
+      - run: sudo apt-get update && sudo apt-get install -y build-essential musl-tools
+      - run: CC=musl-gcc ./build-lua.sh 2>&1 | tail -10
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: lua-merlionos, path: "lua-merlionos\nluac-merlionos", retention-days: 30, if-no-files-found: ignore }
+
+  python:
+    name: "Python 3"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: musl
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: musl-sysroot, path: sysroot/ }
+      - run: sudo apt-get update && sudo apt-get install -y build-essential musl-tools
+      - run: CC=musl-gcc ./build-python.sh 2>&1 | tail -20
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: python3-merlionos, path: python3-merlionos, retention-days: 30, if-no-files-found: ignore }
+
+  examples:
+    name: "C examples"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: musl
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: musl-sysroot, path: sysroot/ }
+      - run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - run: cd examples && make CC=musl-gcc CFLAGS="-static -O2 -Wall" 2>&1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: c-examples, path: "examples/hello\nexamples/echo_server\nexamples/epoll_server\nexamples/threads\nexamples/file_io", retention-days: 30, if-no-files-found: ignore }
