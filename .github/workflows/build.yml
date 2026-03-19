@@ -1,11 +1,12 @@
 name: Build Software for MerlionOS
 
-# Builds real-world software for MerlionOS:
-# - nginx (pure C, ~2 min)
-# - Envoy (C++, ~2-4 hours)
-# - C examples (hello, echo_server, epoll_server, threads, file_io)
+# Builds real-world software for MerlionOS (7 languages):
 #
-# Pipeline: musl → libc++ → nginx/Envoy static link.
+# C:          nginx (~2 min), Lua (~10 sec), Python (~5 min)
+# C++:        Envoy (~3 hours), Node.js (~60 min)
+# Examples:   hello, echo_server, epoll_server, threads, file_io
+#
+# Pipeline: musl → libc++ → all software static-linked.
 
 on:
   workflow_dispatch:  # manual trigger
