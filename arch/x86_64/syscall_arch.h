@@ -39,24 +39,46 @@ static __inline long __syscall3(long n, long a1, long a2, long a3)
 	return ret;
 }
 
-/* MerlionOS currently supports 3 args max.
- * 4-6 arg syscalls pass extra args via memory (future expansion).
- * For now, truncate to 3 args — covers 95% of musl usage. */
+/*
+ * MerlionOS supports 6 args via: rdi, rsi, rdx, r10, r8, r9.
+ * The kernel trampoline reads all 6 and passes to dispatch().
+ * Matches Linux syscall convention (except int 0x80 instead of syscall).
+ */
 
 static __inline long __syscall4(long n, long a1, long a2, long a3, long a4)
 {
-	/* TODO: extend MerlionOS syscall ABI to support rcx/r8/r9 */
-	return __syscall3(n, a1, a2, a3);
+	unsigned long ret;
+	register long r10 __asm__("r10") = a4;
+	__asm__ __volatile__ ("int $0x80"
+		: "=a"(ret)
+		: "a"(n), "D"(a1), "S"(a2), "d"(a3), "r"(r10)
+		: "memory");
+	return ret;
 }
 
 static __inline long __syscall5(long n, long a1, long a2, long a3, long a4, long a5)
 {
-	return __syscall3(n, a1, a2, a3);
+	unsigned long ret;
+	register long r10 __asm__("r10") = a4;
+	register long r8  __asm__("r8")  = a5;
+	__asm__ __volatile__ ("int $0x80"
+		: "=a"(ret)
+		: "a"(n), "D"(a1), "S"(a2), "d"(a3), "r"(r10), "r"(r8)
+		: "memory");
+	return ret;
 }
 
 static __inline long __syscall6(long n, long a1, long a2, long a3, long a4, long a5, long a6)
 {
-	return __syscall3(n, a1, a2, a3);
+	unsigned long ret;
+	register long r10 __asm__("r10") = a4;
+	register long r8  __asm__("r8")  = a5;
+	register long r9  __asm__("r9")  = a6;
+	__asm__ __volatile__ ("int $0x80"
+		: "=a"(ret)
+		: "a"(n), "D"(a1), "S"(a2), "d"(a3), "r"(r10), "r"(r8), "r"(r9)
+		: "memory");
+	return ret;
 }
 
 #define VDSO_USEFUL
