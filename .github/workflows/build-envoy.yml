@@ -251,6 +251,36 @@ jobs:
           retention-days: 30
           if-no-files-found: ignore
 
+  build-python:
+    name: "Build Python 3"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: build-musl
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download musl sysroot
+        uses: actions/download-artifact@v4
+        with:
+          name: musl-sysroot
+          path: sysroot/
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y build-essential musl-tools
+
+      - name: Build CPython
+        run: CC=musl-gcc ./build-python.sh 2>&1 | tail -20
+
+      - name: Upload Python binary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: python3-merlionos
+          path: python3-merlionos
+          retention-days: 30
+          if-no-files-found: ignore
+
   build-examples:
     name: "Build C examples"
     runs-on: ubuntu-latest
